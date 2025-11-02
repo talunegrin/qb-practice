@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Throw Tracker - Enhanced</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%);
+            min-height: 100vh;
+        }
+
+        .app {
+            max-width: 600px;
+            margin: 0 auto;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .app-header {
+            background: linear-gradient(135deg, #2196F3 0%, #4CAF50 100%);
+            color: white;
+            padding: 1.25rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .app-header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .sync-status {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.75rem;
+            background: rgba(255,255,255,0.2);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+        }
+
+        .sync-status.synced { background: rgba(76, 175, 80, 0.3); }
+        .sync-status.syncing { background: rgba(255, 152, 0, 0.3); }
+        .sync-status.offline { background: rgba(244, 67, 54, 0.3); }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.25rem;
+            padding-bottom: 80px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            color: #666;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .target-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        .target-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .target-item h3 {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .target-number, .distance-number {
+            background: none;
+            border: none;
+            font-size: 2.75rem;
+            font-weight: bold;
+            color: #2196F3;
+            cursor: pointer;
+            padding: 0.5rem;
+            transition: transform 0.2s;
+        }
+
+        .distance-number {
+            color: #FF9800;
+        }
+
+        .unit {
+            font-size: 1.25rem;
+            color: rgba(255, 152, 0, 0.7);
+        }
+
+        .divider {
+            width: 2px;
+            height: 60px;
+            background: #e0e0e0;
+            margin: 0 1rem;
+        }
+
+        .progress-number {
+            font-size: 2.75rem;
+            font-weight: bold;
+            color: #333;
+            margin: 0.5rem 0;
+            text-align: center;
+        }
+
+        .progress-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .remaining, .complete {
+            text-align: center;
+            margin: 0.5rem 0;
+            font-weight: 600;
+        }
+
+        .remaining { color: #FF9800; }
+        .complete { color: #4CAF50; font-size: 1.1rem; }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 100%);
+            transition: width 0.3s ease;
+        }
+
+        .throw-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-made, .btn-miss {
+            border: none;
+            border-radius: 15px;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .btn-made {
+            background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
+        }
+
+        .btn-miss {
+            background: linear-gradient(135deg, #f44336 0%, #e57373 100%);
+        }
+
+        .btn-made:active, .btn-miss:active {
+            transform: scale(0.98);
+        }
+
+        .icon {
+            font-size: 2.5rem;
+        }
+
+        .count {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .stats-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .stat-blue { color: #2196F3; }
+        .stat-green { color: #4CAF50; }
+        .stat-red { color: #f44336; }
+        .stat-orange { color: #FF9800; }
+        .stat-purple { color: #9C27B0; }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #9C27B0 0%, #BA68C8 100%);
+        }
+
+        .btn-reset, .btn-new-session {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-reset {
+            background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
+        }
+
+        .btn-new-session {
+            background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-content p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            font-weight: 600;
+        }
+
+        .input-group input {
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn-primary, .btn-secondary {
+            flex: 1;
+            padding: 0.875rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            margin: 1rem 0;
+        }
+
+        .records-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .record-card {
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .record-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .record-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .record-label {
+            font-size: 0.75rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .distance-comparison {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .distance-card {
+            padding: 1rem;
+            background: #f5f5f5;
+            border-radius: 10px;
+            border-left: 4px solid #FF9800;
+        }
+
+        .distance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .distance-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #FF9800;
+        }
+
+        .distance-count {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .distance-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .distance-stat span:first-child {
+            color: #666;
+            display: block;
+            font-size: 0.75rem;
+        }
+
+        .distance-stat span:last-child {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            border-top: 1px solid #e0e0e0;
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab {
+            background: none;
+            border: none;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            cursor: pointer;
+            color: #666;
+            font-size: 0.7rem;
+        }
+
+        .tab:hover {
+            background: #f5f5f5;
+        }
+
+        .tab.active {
+            color: #2196F3;
+            background: rgba(33, 150, 243, 0.05);
+        }
+
+        .tab-icon {
+            font-size: 1.25rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .export-options {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #666;
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .session-card {
+            margin-bottom: 1rem;
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .session-date {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .session-distance {
+            color: #FF9800;
+            font-weight: 600;
+        }
+
+        .session-time {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .session-badges {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .badge {
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+        }
+
+        .badge-blue { background: rgba(33, 150, 243, 0.1); }
+        .badge-green { background: rgba(76, 175, 80, 0.1); }
+        .badge-red { background: rgba(244, 67, 54, 0.1); }
+
+        .badge-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+        }
+
+        .badge-blue .badge-value { color: #2196F3; }
+        .badge-green .badge-value { color: #4CAF50; }
+        .badge-red .badge-value { color: #f44336; }
+
+        .badge-label {
+            font-size: 0.75rem;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .session-details {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        .detail-row span:first-child {
+            color: #666;
+        }
+
+        .btn-delete {
+            width: 100%;
+            padding: 0.75rem;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .achievement-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 0.25rem;
+            box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+        }
+
+        .achievement-new {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .export-session-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .export-session-item:hover {
+            background: #f5f5f5;
+        }
+
+        .export-session-item:last-child {
+            border-bottom: none;
+        }
+
+        .export-session-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 0.75rem;
+            cursor: pointer;
+        }
+
+        .export-session-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .export-session-date {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .export-session-details {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .target-selector {
+            position: relative;
+            max-width: 400px;
+            margin: 1.5rem auto;
+            background: #f5f5f5;
+            border-radius: 15px;
+            padding: 1rem;
+        }
+
+        .target-canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 2;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            border-radius: 15px;
+            border: 8px solid #333;
+            cursor: crosshair;
+            overflow: hidden;
+        }
+
+        .target-zone {
+            position: absolute;
+            left: 30%;
+            right: 30%;
+            height: 20%;
+            background: rgba(76, 175, 80, 0.3);
+            border: 3px solid rgba(76, 175, 80, 0.8);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .target-zone.zone-1 { 
+            top: 10%; 
+            background: rgba(255, 152, 0, 0.3);
+            border-color: rgba(255, 152, 0, 0.8);
+        }
+        .target-zone.zone-2 { 
+            top: 40%; 
+            background: rgba(33, 150, 243, 0.3);
+            border-color: rgba(33, 150, 243, 0.8);
+        }
+        .target-zone.zone-3 { 
+            top: 70%; 
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.8);
+        }
+
+        .zone-number-display {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .hit-marker {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #4CAF50;
+            border: 3px solid #FFF;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.8);
+            animation: hitPulse 0.5s ease-out;
+        }
+
+        .hit-marker.miss {
+            background: #f44336;
+            box-shadow: 0 0 8px rgba(244, 67, 54, 0.8);
+        }
+
+        @keyframes hitPulse {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            50% { transform: translate(-50%, -50%) scale(1.3); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .target-instruction {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        .hit-visualization {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 2;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            border-radius: 15px;
+            border: 8px solid #333;
+            margin: 1rem 0;
+        }
+
+        .accuracy-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .accuracy-stat-card {
+            background: #f5f5f5;
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .accuracy-stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2196F3;
+        }
+
+        .accuracy-stat-label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .session-hit-viz {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f9f9f9;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .session-hit-viz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .session-hit-viz-header h4 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .viz-toggle {
+            font-size: 0.9rem;
+            color: #2196F3;
+            font-weight: 600;
+        }
+
+        .session-hit-viz-content {
+            display: none;
+        }
+
+        .session-hit-viz-content.active {
+            display: block;
+        }
+
+        .session-target-display {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
+            aspect-ratio: 1 / 2;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            border-radius: 15px;
+            border: 6px solid #333;
+        }
+
+        .session-target-zone {
+            position: absolute;
+            left: 30%;
+            right: 30%;
+            height: 20%;
+            background: rgba(76, 175, 80, 0.3);
+            border: 2px solid rgba(76, 175, 80, 0.8);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .session-target-zone.zone-1 { 
+            top: 10%; 
+            background: rgba(255, 152, 0, 0.3);
+            border-color: rgba(255, 152, 0, 0.8);
+        }
+        .session-target-zone.zone-2 { 
+            top: 40%; 
+            background: rgba(33, 150, 243, 0.3);
+            border-color: rgba(33, 150, 243, 0.8);
+        }
+        .session-target-zone.zone-3 { 
+            top: 70%; 
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.8);
+        }
+
+        .session-zone-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7);
+        }
+
+        .session-hit-marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border: 2px solid #FFF;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.8);
+        }
+
+        .session-hit-marker.miss {
+            background: #f44336;
+            box-shadow: 0 0 6px rgba(244, 67, 54, 0.8);
+        }
+
+        .hit-legend {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid #FFF;
+            box-shadow: 0 0 4px rgba(0,0,0,0.3);
+        }
+
+        .legend-dot.made {
+            background: #4CAF50;
+        }
+
+        .legend-dot.miss {
+            background: #f44336;
+        }
+
+        .clear-hits-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #FF9800;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="app-header">
+            <h1>Football Tracker</h1>
+            <div class="sync-status" id="sync-status">●</div>
+        </header>
+
+        <div class="content">
+            <!-- Practice View -->
+            <div id="practice-view">
+                <div class="card">
+                    <div class="target-section">
+                        <div class="target-item">
+                            <h3>Target Throws</h3>
+                            <button class="target-number" id="target-btn">50</button>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="target-item">
+                            <h3>Distance</h3>
+                            <button class="distance-number" id="distance-btn">
+                                <span id="distance-value">20</span> <span class="unit">ft</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Progress</h3>
+                    <div class="progress-number">
+                        <span id="made-count">0</span> / <span id="target-display">50</span>
+                    </div>
+                    <p class="progress-label">successful throws</p>
+                    <p id="remaining-text" class="remaining">50 more needed</p>
+                    <p id="complete-text" class="complete hidden">Target Reached! 🎉</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div id="throw-buttons-container" class="throw-buttons">
+                    <button class="btn-made" id="made-btn">
+                        <span class="icon">✓</span>
+                        <span class="label">MADE</span>
+                        <span class="count" id="made-display">0</span>
+                    </button>
+                    <button class="btn-miss" id="miss-btn">
+                        <span class="icon">✗</span>
+                        <span class="label">MISS</span>
+                        <span class="count" id="miss-display">0</span>
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h3>Session Stats</h3>
+                    <div class="stats-grid">
+                        <div class="stat-row">
+                            <span class="stat-label">Total Attempts</span>
+                            <span class="stat-value stat-blue" id="total-attempts">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Completion %</span>
+                            <span class="stat-value stat-blue" id="completion-pct">0.0%</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Total Time</span>
+                            <span class="stat-value stat-orange" id="total-time">00:00.0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Avg Time/Throw</span>
+                            <span class="stat-value stat-purple" id="avg-time">00:00.0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Made Throws</span>
+                            <span class="stat-value stat-green" id="made-stat">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Missed Throws</span>
+                            <span class="stat-value stat-red" id="miss-stat">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="hit-visualization-card" style="display: none;">
+                    <h3>Hit Pattern 🎯</h3>
+                    <div class="hit-visualization" id="hit-visualization">
+                        <div class="target-zone zone-1">
+                            <div class="zone-number-display">1</div>
+                        </div>
+                        <div class="target-zone zone-2">
+                            <div class="zone-number-display">2</div>
+                        </div>
+                        <div class="target-zone zone-3">
+                            <div class="zone-number-display">3</div>
+                        </div>
+                    </div>
+                    <div class="accuracy-stats">
+                        <div class="accuracy-stat-card">
+                            <div class="accuracy-stat-value" id="avg-height">--</div>
+                            <div class="accuracy-stat-label">Avg Height</div>
+                        </div>
+                        <div class="accuracy-stat-card">
+                            <div class="accuracy-stat-value" id="avg-horizontal">--</div>
+                            <div class="accuracy-stat-label">Avg Position</div>
+                        </div>
+                    </div>
+                    <button class="clear-hits-btn" onclick="clearHitVisualization()">Clear Visualization</button>
+                </div>
+
+                <button id="reset-btn" class="btn-reset hidden">Reset Session</button>
+                <button id="new-session-btn" class="btn-new-session hidden">Start New Session</button>
+            </div>
+
+            <!-- Analytics View -->
+            <div id="analytics-view" class="hidden">
+                <div class="card">
+                    <h3>Completion Rate Over Time</h3>
+                    <div class="chart-container">
+                        <canvas id="progressChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Made vs Missed Throws</h3>
+                    <div class="chart-container">
+                        <canvas id="madeVsMissedChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Average Time Trend</h3>
+                    <div class="chart-container">
+                        <canvas id="timeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Distance Comparison View -->
+            <div id="distance-view" class="hidden">
+                <div id="distance-content"></div>
+            </div>
+
+            <!-- Records View -->
+            <div id="records-view" class="hidden">
+                <div class="card">
+                    <h3>Personal Records 🏆</h3>
+                    <div class="records-grid" id="records-grid"></div>
+                </div>
+
+                <div class="card">
+                    <h3>Achievements</h3>
+                    <div id="achievements-content"></div>
+                </div>
+            </div>
+
+            <!-- History View -->
+            <div id="history-view" class="hidden">
+                <div class="card" style="padding: 1rem;">
+                    <button class="btn-action btn-export" onclick="showExportModal()" style="width: 100%;">📤 Export Data</button>
+                </div>
+                <div id="history-content"></div>
+            </div>
+        </div>
+
+        <nav class="tab-bar">
+            <button class="tab active" data-tab="practice">
+                <span class="tab-icon">🏈</span>
+                <span>Practice</span>
+            </button>
+            <button class="tab" data-tab="analytics">
+                <span class="tab-icon">📈</span>
+                <span>Analytics</span>
+            </button>
+            <button class="tab" data-tab="distance">
+                <span class="tab-icon">📏</span>
+                <span>Distance</span>
+            </button>
+            <button class="tab" data-tab="records">
+                <span class="tab-icon">🏆</span>
+                <span>Records</span>
+            </button>
+            <button class="tab" data-tab="history">
+                <span class="tab-icon">📊</span>
+                <span>History</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content">
+            <h2>Set Session Parameters</h2>
+            <p>How many SUCCESSFUL throws and at what distance?</p>
+            <div class="input-group">
+                <label>
+                    Target Throws:
+                    <input type="number" id="target-input" value="50" min="1">
+                </label>
+                <label>
+                    Distance (feet):
+                    <input type="number" id="distance-input" value="20" min="1">
+                </label>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-primary" id="set-btn">Set</button>
+                <button class="btn-secondary" id="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal-overlay" id="export-modal">
+        <div class="modal-content">
+            <h2>Export Sessions</h2>
+            <p>Select sessions to export:</p>
+            
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                <button class="btn-secondary" onclick="selectAllSessions()" style="flex: 1;">Select All</button>
+                <button class="btn-secondary" onclick="deselectAllSessions()" style="flex: 1;">Deselect All</button>
+            </div>
+            
+            <div id="export-session-list" style="max-height: 300px; overflow-y: auto; margin-bottom: 1rem; border: 1px solid #e0e0e0; border-radius: 8px; padding: 0.5rem;">
+                <!-- Sessions will be populated here -->
+            </div>
+            
+            <p id="export-count" style="font-size: 0.9rem; color: #666; margin-bottom: 1rem;">0 sessions selected</p>
+            
+            <p style="font-size: 0.9rem; margin-bottom: 1rem;">Choose export format:</p>
+            <div class="export-options">
+                <button class="btn-primary" onclick="exportSelectedData('csv')">Download CSV</button>
+                <button class="btn-primary" onclick="exportSelectedData('json')">Download JSON</button>
+            </div>
+            <div class="modal-buttons" style="margin-top: 1rem;">
+                <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloud Sync Modal -->
+    <div class="modal-overlay" id="sync-modal">
+        <div class="modal-content">
+            <h2>Cloud Sync</h2>
+            <p>Sign in to sync your data across devices</p>
+            <div class="input-group">
+                <label>
+                    Email:
+                    <input type="email" id="sync-email" placeholder="your@email.com">
+                </label>
+                <label>
+                    Password:
+                    <input type="password" id="sync-password" placeholder="Password">
+                </label>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-primary" onclick="signInSync()">Sign In</button>
+                <button class="btn-primary" onclick="signUpSync()">Sign Up</button>
+                <button class="btn-secondary" onclick="closeSyncModal()">Cancel</button>
+            </div>
+            <p style="margin-top: 1rem; font-size: 0.85rem;">Or sync anonymously (data tied to this device)</p>
+            <button class="btn-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="anonymousSync()">Anonymous Sync</button>
+        </div>
+    </div>
+
+    <!-- Target Hit Selection Modal -->
+    <div class="modal-overlay" id="zone-modal">
+        <div class="modal-content">
+            <h2 id="zone-modal-title">Mark Hit Location 🎯</h2>
+            <p id="zone-modal-subtitle">Tap where the ball hit on the target</p>
+            <div class="target-selector">
+                <div class="target-canvas-container" id="target-canvas" onclick="recordHitPosition(event)">
+                    <div class="target-zone zone-1">
+                        <div class="zone-number-display">1</div>
+                    </div>
+                    <div class="target-zone zone-2">
+                        <div class="zone-number-display">2</div>
+                    </div>
+                    <div class="target-zone zone-3">
+                        <div class="zone-number-display">3</div>
+                    </div>
+                </div>
+                <div class="target-instruction">
+                    <strong>Green zones (1,2,3)</strong> = Scoring pockets<br>
+                    <strong>Red area</strong> = Outside zones (misses)
+                </div>
+            </div>
+            <button class="btn-secondary" onclick="closeZoneModal()" style="width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration - Loaded from Vercel Environment Variables
+        let firebaseConfig = null;
+        let db = null;
+        let auth = null;
+        let firebaseEnabled = false;
+
+        // Fetch Firebase config from Vercel API endpoint
+        const initializeFirebase = async () => {
+            try {
+                // Determine the API endpoint based on environment
+                const apiEndpoint = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? '/api/firebase-config'  // Local development
+                    : '/api/firebase-config';  // Production on Vercel
+                
+                // Fetch config from API
+                const response = await fetch(apiEndpoint);
+                
+                if (!response.ok) {
+                    console.warn('Firebase config not available:', response.statusText);
+                    return;
+                }
+                
+                firebaseConfig = await response.json();
+                
+                // Validate config
+                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                    console.warn('Invalid Firebase config received');
+                    return;
+                }
+                
+                // Initialize Firebase
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                firebaseEnabled = true;
+                
+                console.log('✅ Firebase initialized successfully from Vercel environment variables');
+                
+            } catch (error) {
+                console.warn('Firebase not configured or API endpoint unavailable:', error.message);
+                console.log('ℹ️  App will work in offline mode using localStorage');
+            }
+        };
+
+        // Initialize Firebase on page load
+        initializeFirebase();
+
+        // State
+        let state = {
+            targetThrows: 50,
+            distanceFeet: 20,
+            madeThrows: 0,
+            missedThrows: 0,
+            startTime: null,
+            elapsedTime: 0,
+            sessionComplete: false,
+            timerInterval: null,
+            userId: null,
+            hitPositions: [], // Store {x, y, type: 'made'|'miss'} coordinates as percentages
+            currentThrowType: null // Track if current throw is 'made' or 'miss'
+        };
+
+        // Load sessions from localStorage
+        const getSessions = () => {
+            const sessions = localStorage.getItem('throwSessions');
+            return sessions ? JSON.parse(sessions) : [];
+        };
+
+        const saveSessions = (sessions) => {
+            localStorage.setItem('throwSessions', JSON.stringify(sessions));
+            if (firebaseEnabled && state.userId) {
+                syncToCloud(sessions);
+            }
+        };
+
+        // Cloud Sync Functions
+        const syncToCloud = async (sessions) => {
+            if (!firebaseEnabled) return;
+            
+            updateSyncStatus('syncing');
+            try {
+                await db.collection('users').doc(state.userId).set({
+                    sessions: sessions,
+                    lastSync: new Date().toISOString()
+                });
+                updateSyncStatus('synced');
+            } catch (error) {
+                console.error('Sync error:', error);
+                updateSyncStatus('offline');
+            }
+        };
+
+        const syncFromCloud = async () => {
+            if (!firebaseEnabled || !state.userId) return;
+            
+            updateSyncStatus('syncing');
+            try {
+                const doc = await db.collection('users').doc(state.userId).get();
+                if (doc.exists) {
+                    const cloudSessions = doc.data().sessions || [];
+                    const localSessions = getSessions();
+                    
+                    // Merge sessions (keep all unique sessions)
+                    const mergedSessions = [...cloudSessions];
+                    localSessions.forEach(local => {
+                        if (!mergedSessions.find(s => s.id === local.id)) {
+                            mergedSessions.push(local);
+                        }
+                    });
+                    
+                    saveSessions(mergedSessions);
+                    updateSyncStatus('synced');
+                    return mergedSessions;
+                }
+            } catch (error) {
+                console.error('Sync error:', error);
+                updateSyncStatus('offline');
+            }
+            return getSessions();
+        };
+
+        const updateSyncStatus = (status) => {
+            const el = document.getElementById('sync-status');
+            el.className = 'sync-status ' + status;
+            const symbols = {
+                'synced': '✓',
+                'syncing': '↻',
+                'offline': '✗'
+            };
+            el.textContent = symbols[status] || '●';
+        };
+
+        const signInSync = async () => {
+            if (!firebaseEnabled) {
+                alert('Firebase is not configured. Please add your Firebase config to enable cloud sync.');
+                return;
+            }
+            
+            const email = document.getElementById('sync-email').value;
+            const password = document.getElementById('sync-password').value;
+            
+            try {
+                const result = await auth.signInWithEmailAndPassword(email, password);
+                state.userId = result.user.uid;
+                localStorage.setItem('userId', state.userId);
+                closeSyncModal();
+                await syncFromCloud();
+                alert('Signed in successfully!');
+            } catch (error) {
+                alert('Sign in failed: ' + error.message);
+            }
+        };
+
+        const signUpSync = async () => {
+            if (!firebaseEnabled) {
+                alert('Firebase is not configured. Please add your Firebase config to enable cloud sync.');
+                return;
+            }
+            
+            const email = document.getElementById('sync-email').value;
+            const password = document.getElementById('sync-password').value;
+            
+            try {
+                const result = await auth.createUserWithEmailAndPassword(email, password);
+                state.userId = result.user.uid;
+                localStorage.setItem('userId', state.userId);
+                closeSyncModal();
+                await syncToCloud(getSessions());
+                alert('Account created successfully!');
+            } catch (error) {
+                alert('Sign up failed: ' + error.message);
+            }
+        };
+
+        const anonymousSync = async () => {
+            if (!firebaseEnabled) {
+                alert('Firebase is not configured. Please add your Firebase config to enable cloud sync.');
+                return;
+            }
+            
+            try {
+                const result = await auth.signInAnonymously();
+                state.userId = result.user.uid;
+                localStorage.setItem('userId', state.userId);
+                closeSyncModal();
+                await syncToCloud(getSessions());
+                alert('Anonymous sync enabled!');
+            } catch (error) {
+                alert('Anonymous sync failed: ' + error.message);
+            }
+        };
+
+        const closeSyncModal = () => {
+            document.getElementById('sync-modal').classList.remove('active');
+        };
+
+        // Export Functions
+        const showExportModal = () => {
+            const sessions = getSessions();
+            
+            if (sessions.length === 0) {
+                alert('No sessions to export yet. Complete at least one practice session.');
+                return;
+            }
+            
+            populateExportSessionList(sessions);
+            document.getElementById('export-modal').classList.add('active');
+        };
+
+        const populateExportSessionList = (sessions) => {
+            const container = document.getElementById('export-session-list');
+            
+            container.innerHTML = sessions.map((session, index) => {
+                const date = new Date(session.date);
+                const total = session.madeThrows + session.missedThrows;
+                const completion = total > 0 ? (session.madeThrows / total * 100).toFixed(1) : 0;
+                const hitInfo = session.hitPositions && session.hitPositions.length > 0 ? 
+                    ` • ${session.hitPositions.length} hit positions` : '';
+                
+                return `
+                    <label class="export-session-item" for="export-session-${session.id}">
+                        <input 
+                            type="checkbox" 
+                            id="export-session-${session.id}" 
+                            value="${session.id}"
+                            onchange="updateExportCount()"
+                            checked
+                        >
+                        <div class="export-session-info">
+                            <div class="export-session-date">
+                                ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                            </div>
+                            <div class="export-session-details">
+                                ${session.distanceFeet} ft • ${session.madeThrows}/${session.targetThrows} made (${completion}%)${hitInfo}
+                            </div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+            
+            updateExportCount();
+        };
+
+        const selectAllSessions = () => {
+            document.querySelectorAll('#export-session-list input[type="checkbox"]').forEach(cb => {
+                cb.checked = true;
+            });
+            updateExportCount();
+        };
+
+        const deselectAllSessions = () => {
+            document.querySelectorAll('#export-session-list input[type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+            });
+            updateExportCount();
+        };
+
+        const updateExportCount = () => {
+            const checked = document.querySelectorAll('#export-session-list input[type="checkbox"]:checked').length;
+            const total = document.querySelectorAll('#export-session-list input[type="checkbox"]').length;
+            document.getElementById('export-count').textContent = 
+                `${checked} of ${total} session${total !== 1 ? 's' : ''} selected`;
+        };
+
+        const closeExportModal = () => {
+            document.getElementById('export-modal').classList.remove('active');
+        };
+
+        const exportSelectedData = (format) => {
+            const selectedIds = Array.from(
+                document.querySelectorAll('#export-session-list input[type="checkbox"]:checked')
+            ).map(cb => cb.value);
+            
+            if (selectedIds.length === 0) {
+                alert('Please select at least one session to export.');
+                return;
+            }
+            
+            const allSessions = getSessions();
+            const selectedSessions = allSessions.filter(s => selectedIds.includes(s.id));
+            
+            if (format === 'csv') {
+                exportToCSV(selectedSessions);
+            } else if (format === 'json') {
+                exportToJSON(selectedSessions);
+            }
+            
+            closeExportModal();
+        };
+
+        const exportToCSV = (sessions) => {
+            const headers = ['Date', 'Time', 'Distance (ft)', 'Target', 'Made', 'Missed', 'Total', 'Completion %', 'Total Time', 'Avg Time/Throw', 'Avg Height', 'Avg Horizontal', 'Hit Consistency'];
+            const rows = sessions.map(s => {
+                const date = new Date(s.date);
+                const total = s.madeThrows + s.missedThrows;
+                const completion = total > 0 ? (s.madeThrows / total * 100).toFixed(1) : 0;
+                const avgTime = total > 0 ? (s.totalTime / total).toFixed(2) : 0;
+                
+                // Calculate hit pattern stats
+                let avgHeight = '--', avgHorizontal = '--', consistency = '--';
+                if (s.hitPositions && s.hitPositions.length > 0) {
+                    const avgY = s.hitPositions.reduce((sum, hit) => sum + hit.y, 0) / s.hitPositions.length;
+                    const avgX = s.hitPositions.reduce((sum, hit) => sum + hit.x, 0) / s.hitPositions.length;
+                    
+                    // Height categorization
+                    if (avgY < 33) avgHeight = 'High';
+                    else if (avgY > 67) avgHeight = 'Low';
+                    else avgHeight = 'Middle';
+                    
+                    // Horizontal categorization
+                    if (avgX < 40) avgHorizontal = 'Left';
+                    else if (avgX > 60) avgHorizontal = 'Right';
+                    else avgHorizontal = 'Center';
+                    
+                    // Calculate consistency (standard deviation)
+                    const stdDevY = Math.sqrt(s.hitPositions.reduce((sum, hit) => sum + Math.pow(hit.y - avgY, 2), 0) / s.hitPositions.length);
+                    const stdDevX = Math.sqrt(s.hitPositions.reduce((sum, hit) => sum + Math.pow(hit.x - avgX, 2), 0) / s.hitPositions.length);
+                    const avgStdDev = (stdDevY + stdDevX) / 2;
+                    
+                    if (avgStdDev < 10) consistency = 'Tight';
+                    else if (avgStdDev < 20) consistency = 'Good';
+                    else consistency = 'Spread';
+                }
+                
+                return [
+                    date.toLocaleDateString(),
+                    date.toLocaleTimeString(),
+                    s.distanceFeet,
+                    s.targetThrows,
+                    s.madeThrows,
+                    s.missedThrows,
+                    total,
+                    completion,
+                    s.totalTime.toFixed(2),
+                    avgTime,
+                    avgHeight,
+                    avgHorizontal,
+                    consistency
+                ];
+            });
+            
+            const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+            const filename = `football-tracker-${sessions.length}-sessions-${new Date().toISOString().split('T')[0]}.csv`;
+            downloadFile(filename, csv, 'text/csv');
+        };
+
+        const exportToJSON = (sessions) => {
+            const json = JSON.stringify(sessions, null, 2);
+            const filename = `football-tracker-${sessions.length}-sessions-${new Date().toISOString().split('T')[0]}.json`;
+            downloadFile(filename, json, 'application/json');
+        };
+
+        const downloadFile = (filename, content, mimeType) => {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        // Format time
+        const formatTime = (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 10);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`;
+        };
+
+        // Update UI
+        const updateUI = () => {
+            const totalThrows = state.madeThrows + state.missedThrows;
+            const completionPct = totalThrows > 0 ? (state.madeThrows / totalThrows * 100) : 0;
+            const avgTime = totalThrows > 0 ? state.elapsedTime / totalThrows : 0;
+            const remaining = Math.max(0, state.targetThrows - state.madeThrows);
+
+            document.getElementById('made-count').textContent = state.madeThrows;
+            document.getElementById('target-display').textContent = state.targetThrows;
+            document.getElementById('made-display').textContent = state.madeThrows;
+            document.getElementById('miss-display').textContent = state.missedThrows;
+            document.getElementById('total-attempts').textContent = totalThrows;
+            document.getElementById('completion-pct').textContent = completionPct.toFixed(1) + '%';
+            document.getElementById('total-time').textContent = formatTime(state.elapsedTime);
+            document.getElementById('avg-time').textContent = formatTime(avgTime);
+            document.getElementById('made-stat').textContent = state.madeThrows;
+            document.getElementById('miss-stat').textContent = state.missedThrows;
+            document.getElementById('target-btn').textContent = state.targetThrows;
+            document.getElementById('distance-value').textContent = state.distanceFeet;
+
+            // Show hit visualization card if any made throws
+            if (state.madeThrows > 0) {
+                document.getElementById('hit-visualization-card').style.display = 'block';
+            } else {
+                document.getElementById('hit-visualization-card').style.display = 'none';
+            }
+
+            const progressPct = (state.madeThrows / state.targetThrows) * 100;
+            document.getElementById('progress-fill').style.width = progressPct + '%';
+
+            if (remaining > 0 && !state.sessionComplete) {
+                document.getElementById('remaining-text').textContent = remaining + ' more needed';
+                document.getElementById('remaining-text').classList.remove('hidden');
+                document.getElementById('complete-text').classList.add('hidden');
+            } else if (state.sessionComplete) {
+                document.getElementById('remaining-text').classList.add('hidden');
+                document.getElementById('complete-text').classList.remove('hidden');
+            }
+
+            if (totalThrows > 0) {
+                if (state.sessionComplete) {
+                    document.getElementById('throw-buttons-container').classList.add('hidden');
+                    document.getElementById('reset-btn').classList.add('hidden');
+                    document.getElementById('new-session-btn').classList.remove('hidden');
+                } else {
+                    document.getElementById('reset-btn').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('reset-btn').classList.add('hidden');
+                document.getElementById('new-session-btn').classList.add('hidden');
+            }
+
+            document.getElementById('target-btn').disabled = totalThrows > 0;
+            document.getElementById('distance-btn').disabled = totalThrows > 0;
+        };
+
+        // Start timer
+        const startTimer = () => {
+            if (!state.startTime) {
+                state.startTime = Date.now();
+                state.timerInterval = setInterval(() => {
+                    state.elapsedTime = (Date.now() - state.startTime) / 1000;
+                    updateUI();
+                }, 100);
+            }
+        };
+
+        // Stop timer
+        const stopTimer = () => {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+        };
+
+        // Save session
+        const saveSession = () => {
+            const session = {
+                id: Date.now().toString(),
+                date: new Date().toISOString(),
+                targetThrows: state.targetThrows,
+                madeThrows: state.madeThrows,
+                missedThrows: state.missedThrows,
+                totalTime: state.elapsedTime,
+                distanceFeet: state.distanceFeet,
+                hitPositions: [...state.hitPositions] // Include precise hit coordinates
+            };
+            const sessions = getSessions();
+            sessions.unshift(session);
+            saveSessions(sessions);
+            
+            // Check for new achievements
+            checkAchievements(session, sessions);
+        };
+
+        // Check for achievements
+        const checkAchievements = (newSession, allSessions) => {
+            const achievements = [];
+            const total = newSession.madeThrows + newSession.missedThrows;
+            const completion = total > 0 ? (newSession.madeThrows / total * 100) : 0;
+            
+            // Perfect session
+            if (newSession.missedThrows === 0 && newSession.madeThrows >= 10) {
+                achievements.push('🎯 Perfect Session!');
+            }
+            
+            // High accuracy
+            if (completion >= 90 && total >= 20) {
+                achievements.push('🔥 Sharpshooter (90%+)');
+            }
+            
+            // Hit pattern achievements
+            if (newSession.hitPositions && newSession.hitPositions.length >= 10) {
+                const avgY = newSession.hitPositions.reduce((sum, hit) => sum + hit.y, 0) / newSession.hitPositions.length;
+                const stdDevY = Math.sqrt(newSession.hitPositions.reduce((sum, hit) => sum + Math.pow(hit.y - avgY, 2), 0) / newSession.hitPositions.length);
+                const stdDevX = Math.sqrt(newSession.hitPositions.reduce((sum, hit) => {
+                    const avgX = newSession.hitPositions.reduce((s, h) => s + h.x, 0) / newSession.hitPositions.length;
+                    return sum + Math.pow(hit.x - avgX, 2);
+                }, 0) / newSession.hitPositions.length);
+                const avgStdDev = (stdDevY + stdDevX) / 2;
+                
+                // Tight grouping achievement
+                if (avgStdDev < 10) {
+                    achievements.push('🎖️ Laser Focus (Tight hit grouping)');
+                }
+                
+                // Center target achievement
+                const avgX = newSession.hitPositions.reduce((sum, hit) => sum + hit.x, 0) / newSession.hitPositions.length;
+                if (avgX > 40 && avgX < 60 && avgY > 35 && avgY < 65) {
+                    achievements.push('🎯 Bulls-eye (Centered shots)');
+                }
+            }
+            
+            // Milestones
+            if (allSessions.length === 10) achievements.push('🎖️ 10 Sessions Complete');
+            if (allSessions.length === 50) achievements.push('🏅 50 Sessions Complete');
+            if (allSessions.length === 100) achievements.push('👑 Century Club');
+            
+            // Total throws milestone
+            const totalMade = allSessions.reduce((sum, s) => sum + s.madeThrows, 0);
+            if (totalMade >= 100 && totalMade < 200) achievements.push('💯 100 Made Throws');
+            if (totalMade >= 500 && totalMade < 600) achievements.push('🌟 500 Made Throws');
+            if (totalMade >= 1000 && totalMade < 1100) achievements.push('⭐ 1000 Made Throws');
+            
+            // Show achievements
+            if (achievements.length > 0) {
+                setTimeout(() => {
+                    alert('New Achievements!\n\n' + achievements.join('\n'));
+                }, 500);
+            }
+        };
+
+        // Record made
+        document.getElementById('made-btn').addEventListener('click', () => {
+            startTimer();
+            state.currentThrowType = 'made';
+            // Update modal title
+            document.getElementById('zone-modal-title').textContent = 'Made Throw! 🎯';
+            document.getElementById('zone-modal-subtitle').textContent = 'Tap where the ball hit in the scoring zones';
+            // Show target selection modal
+            document.getElementById('zone-modal').classList.add('active');
+        });
+
+        const recordHitPosition = (event) => {
+            const target = document.getElementById('target-canvas');
+            const rect = target.getBoundingClientRect();
+            
+            // Calculate click position as percentage of target dimensions
+            const x = ((event.clientX - rect.left) / rect.width) * 100;
+            const y = ((event.clientY - rect.top) / rect.height) * 100;
+            
+            // Store the hit position with type
+            const throwType = state.currentThrowType || 'made';
+            state.hitPositions.push({ x, y, type: throwType });
+            
+            // Update counts based on throw type
+            if (throwType === 'made') {
+                state.madeThrows++;
+            } else {
+                state.missedThrows++;
+            }
+            
+            closeZoneModal();
+            
+            if (state.madeThrows >= state.targetThrows && !state.sessionComplete) {
+                state.sessionComplete = true;
+                stopTimer();
+                saveSession();
+            }
+            
+            updateUI();
+            updateHitVisualization();
+        };
+
+        const closeZoneModal = () => {
+            document.getElementById('zone-modal').classList.remove('active');
+        };
+
+        const updateHitVisualization = () => {
+            const container = document.getElementById('hit-visualization');
+            
+            if (!container) return; // Container might not exist yet
+            
+            // Remove old markers
+            const oldMarkers = container.querySelectorAll('.hit-marker');
+            oldMarkers.forEach(marker => marker.remove());
+            
+            // Add new markers for all hits
+            state.hitPositions.forEach((hit, index) => {
+                const marker = document.createElement('div');
+                marker.className = hit.type === 'miss' ? 'hit-marker miss' : 'hit-marker';
+                marker.style.left = hit.x + '%';
+                marker.style.top = hit.y + '%';
+                marker.title = `Throw #${index + 1} (${hit.type})`;
+                container.appendChild(marker);
+            });
+            
+            // Calculate and display accuracy stats
+            if (state.hitPositions.length > 0) {
+                const madeHits = state.hitPositions.filter(h => h.type === 'made');
+                if (madeHits.length > 0) {
+                    const avgY = madeHits.reduce((sum, hit) => sum + hit.y, 0) / madeHits.length;
+                    const avgX = madeHits.reduce((sum, hit) => sum + hit.x, 0) / madeHits.length;
+                    
+                    // Map Y position to height labels
+                    let heightLabel = 'Middle';
+                    if (avgY < 33) heightLabel = 'High';
+                    else if (avgY > 67) heightLabel = 'Low';
+                    
+                    // Map X position to horizontal labels  
+                    let horizontalLabel = 'Center';
+                    if (avgX < 40) horizontalLabel = 'Left';
+                    else if (avgX > 60) horizontalLabel = 'Right';
+                    
+                    const avgHeightEl = document.getElementById('avg-height');
+                    const avgHorizontalEl = document.getElementById('avg-horizontal');
+                    if (avgHeightEl) avgHeightEl.textContent = heightLabel;
+                    if (avgHorizontalEl) avgHorizontalEl.textContent = horizontalLabel;
+                }
+            }
+        };
+
+        const clearHitVisualization = () => {
+            const container = document.getElementById('hit-visualization');
+            const markers = container.querySelectorAll('.hit-marker');
+            markers.forEach(marker => marker.remove());
+        };
+
+        // Record miss
+        document.getElementById('miss-btn').addEventListener('click', () => {
+            startTimer();
+            state.currentThrowType = 'miss';
+            // Update modal title
+            document.getElementById('zone-modal-title').textContent = 'Missed Throw ❌';
+            document.getElementById('zone-modal-subtitle').textContent = 'Tap where the ball hit (likely outside scoring zones)';
+            // Show target selection modal
+            document.getElementById('zone-modal').classList.add('active');
+        });
+
+        // Reset session
+        const resetSession = () => {
+            stopTimer();
+            state.madeThrows = 0;
+            state.missedThrows = 0;
+            state.startTime = null;
+            state.elapsedTime = 0;
+            state.sessionComplete = false;
+            state.hitPositions = [];
+            clearHitVisualization();
+            document.getElementById('throw-buttons-container').classList.remove('hidden');
+            document.getElementById('settings-modal').classList.add('active');
+            updateUI();
+        };
+
+        document.getElementById('reset-btn').addEventListener('click', resetSession);
+        document.getElementById('new-session-btn').addEventListener('click', resetSession);
+
+        // Settings modal
+        document.getElementById('target-btn').addEventListener('click', () => {
+            if (state.madeThrows + state.missedThrows === 0) {
+                document.getElementById('settings-modal').classList.add('active');
+            }
+        });
+
+        document.getElementById('distance-btn').addEventListener('click', () => {
+            if (state.madeThrows + state.missedThrows === 0) {
+                document.getElementById('settings-modal').classList.add('active');
+            }
+        });
+
+        document.getElementById('set-btn').addEventListener('click', () => {
+            state.targetThrows = parseInt(document.getElementById('target-input').value) || 50;
+            state.distanceFeet = parseInt(document.getElementById('distance-input').value) || 20;
+            document.getElementById('settings-modal').classList.remove('active');
+            updateUI();
+        });
+
+        document.getElementById('cancel-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.remove('active');
+        });
+
+        document.getElementById('settings-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'settings-modal') {
+                document.getElementById('settings-modal').classList.remove('active');
+            }
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Hide all views
+                ['practice-view', 'analytics-view', 'distance-view', 'records-view', 'history-view'].forEach(view => {
+                    document.getElementById(view).classList.add('hidden');
+                });
+                
+                // Show selected view
+                document.getElementById(targetTab + '-view').classList.remove('hidden');
+                
+                // Render content for specific views
+                if (targetTab === 'analytics') renderAnalytics();
+                if (targetTab === 'distance') renderDistanceComparison();
+                if (targetTab === 'records') renderRecords();
+                if (targetTab === 'history') renderHistory();
+            });
+        });
+
+        // Render Analytics
+        let progressChart, madeVsMissedChart, timeChart;
+
+        const renderAnalytics = () => {
+            const sessions = getSessions().slice(0, 30).reverse(); // Last 30 sessions
+            
+            if (sessions.length === 0) {
+                document.getElementById('analytics-view').innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h2>No data yet</h2><p>Complete some practice sessions to see analytics</p></div>';
+                return;
+            }
+            
+            const labels = sessions.map((s, i) => `#${i + 1}`);
+            const completionData = sessions.map(s => {
+                const total = s.madeThrows + s.missedThrows;
+                return total > 0 ? (s.madeThrows / total * 100).toFixed(1) : 0;
+            });
+            const madeData = sessions.map(s => s.madeThrows);
+            const missedData = sessions.map(s => s.missedThrows);
+            const timeData = sessions.map(s => {
+                const total = s.madeThrows + s.missedThrows;
+                return total > 0 ? (s.totalTime / total).toFixed(2) : 0;
+            });
+            
+            // Completion Rate Chart
+            if (progressChart) progressChart.destroy();
+            progressChart = new Chart(document.getElementById('progressChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Completion %',
+                        data: completionData,
+                        borderColor: '#4CAF50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+            
+            // Made vs Missed Chart
+            if (madeVsMissedChart) madeVsMissedChart.destroy();
+            madeVsMissedChart = new Chart(document.getElementById('madeVsMissedChart'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Made',
+                            data: madeData,
+                            backgroundColor: 'rgba(76, 175, 80, 0.8)'
+                        },
+                        {
+                            label: 'Missed',
+                            data: missedData,
+                            backgroundColor: 'rgba(244, 67, 54, 0.8)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+            
+            // Time Chart
+            if (timeChart) timeChart.destroy();
+            timeChart = new Chart(document.getElementById('timeChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Avg Time/Throw (s)',
+                        data: timeData,
+                        borderColor: '#FF9800',
+                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        };
+
+        // Render Distance Comparison
+        const renderDistanceComparison = () => {
+            const sessions = getSessions();
+            
+            if (sessions.length === 0) {
+                document.getElementById('distance-content').innerHTML = '<div class="empty-state"><div class="empty-icon">📏</div><h2>No data yet</h2><p>Complete some practice sessions to see distance comparison</p></div>';
+                return;
+            }
+            
+            // Group by distance
+            const byDistance = {};
+            sessions.forEach(s => {
+                if (!byDistance[s.distanceFeet]) {
+                    byDistance[s.distanceFeet] = [];
+                }
+                byDistance[s.distanceFeet].push(s);
+            });
+            
+            // Sort by distance
+            const distances = Object.keys(byDistance).sort((a, b) => parseInt(a) - parseInt(b));
+            
+            const html = `
+                <div class="card">
+                    <h3>Performance by Distance</h3>
+                    <div class="distance-comparison">
+                        ${distances.map(dist => {
+                            const distSessions = byDistance[dist];
+                            const totalMade = distSessions.reduce((sum, s) => sum + s.madeThrows, 0);
+                            const totalMissed = distSessions.reduce((sum, s) => sum + s.missedThrows, 0);
+                            const total = totalMade + totalMissed;
+                            const completion = total > 0 ? ((totalMade / total) * 100).toFixed(1) : 0;
+                            const avgTime = distSessions.reduce((sum, s) => {
+                                const t = s.madeThrows + s.missedThrows;
+                                return sum + (t > 0 ? s.totalTime / t : 0);
+                            }, 0) / distSessions.length;
+                            
+                            return `
+                                <div class="distance-card">
+                                    <div class="distance-header">
+                                        <div class="distance-value">${dist} ft</div>
+                                        <div class="distance-count">${distSessions.length} sessions</div>
+                                    </div>
+                                    <div class="distance-stats">
+                                        <div class="distance-stat">
+                                            <span>Made</span>
+                                            <span class="stat-green">${totalMade}</span>
+                                        </div>
+                                        <div class="distance-stat">
+                                            <span>Completion</span>
+                                            <span class="stat-blue">${completion}%</span>
+                                        </div>
+                                        <div class="distance-stat">
+                                            <span>Avg Time</span>
+                                            <span class="stat-orange">${avgTime.toFixed(1)}s</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('distance-content').innerHTML = html;
+        };
+
+        // Render Records
+        const renderRecords = () => {
+            const sessions = getSessions();
+            
+            if (sessions.length === 0) {
+                document.getElementById('records-grid').innerHTML = '<div style="grid-column: 1 / -1;" class="empty-state"><div class="empty-icon">🏆</div><h2>No records yet</h2><p>Complete practice sessions to earn records</p></div>';
+                document.getElementById('achievements-content').innerHTML = '';
+                return;
+            }
+            
+            // Calculate records
+            const bestCompletion = Math.max(...sessions.map(s => {
+                const total = s.madeThrows + s.missedThrows;
+                return total > 0 ? (s.madeThrows / total * 100) : 0;
+            })).toFixed(1);
+            
+            const mostMade = Math.max(...sessions.map(s => s.madeThrows));
+            
+            const fastestSession = sessions.reduce((min, s) => {
+                const total = s.madeThrows + s.missedThrows;
+                const avg = total > 0 ? s.totalTime / total : Infinity;
+                return avg < min ? avg : min;
+            }, Infinity).toFixed(2);
+            
+            const totalSessions = sessions.length;
+            const totalMade = sessions.reduce((sum, s) => sum + s.madeThrows, 0);
+            const totalMissed = sessions.reduce((sum, s) => sum + s.missedThrows, 0);
+            const overallCompletion = totalMade + totalMissed > 0 ? 
+                ((totalMade / (totalMade + totalMissed)) * 100).toFixed(1) : 0;
+            
+            const longestDistance = Math.max(...sessions.map(s => s.distanceFeet));
+            
+            const records = [
+                { icon: '🎯', value: bestCompletion + '%', label: 'Best Completion' },
+                { icon: '🔥', value: mostMade, label: 'Most Made' },
+                { icon: '⚡', value: fastestSession + 's', label: 'Fastest Avg' },
+                { icon: '📊', value: totalSessions, label: 'Total Sessions' },
+                { icon: '✓', value: totalMade, label: 'Total Made' },
+                { icon: '📈', value: overallCompletion + '%', label: 'Overall Rate' },
+                { icon: '📏', value: longestDistance + ' ft', label: 'Max Distance' },
+                { icon: '🎖️', value: (totalMade / totalSessions).toFixed(0), label: 'Avg Made/Session' }
+            ];
+            
+            document.getElementById('records-grid').innerHTML = records.map(r => `
+                <div class="record-card">
+                    <div class="record-icon">${r.icon}</div>
+                    <div class="record-value">${r.value}</div>
+                    <div class="record-label">${r.label}</div>
+                </div>
+            `).join('');
+            
+            // Achievements
+            const achievements = [];
+            if (totalSessions >= 10) achievements.push('10 Sessions');
+            if (totalSessions >= 50) achievements.push('50 Sessions');
+            if (totalSessions >= 100) achievements.push('100 Sessions');
+            if (totalMade >= 100) achievements.push('100 Made Throws');
+            if (totalMade >= 500) achievements.push('500 Made Throws');
+            if (totalMade >= 1000) achievements.push('1000 Made Throws');
+            if (parseFloat(bestCompletion) >= 95) achievements.push('95% Accuracy');
+            if (mostMade >= 50) achievements.push('50 in One Session');
+            
+            document.getElementById('achievements-content').innerHTML = achievements.length > 0 ?
+                achievements.map(a => `<span class="achievement-badge">${a}</span>`).join('') :
+                '<p style="text-align: center; color: #666;">Keep practicing to unlock achievements!</p>';
+        };
+
+        // Render history
+        const renderHistory = () => {
+            const sessions = getSessions();
+            const container = document.getElementById('history-content');
+            
+            if (sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📊</div>
+                        <h2>No practice sessions yet</h2>
+                        <p>Complete a practice session to see history here</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = sessions.map(session => {
+                const date = new Date(session.date);
+                const totalThrows = session.madeThrows + session.missedThrows;
+                const completionPct = totalThrows > 0 ? (session.madeThrows / totalThrows * 100) : 0;
+                const avgTime = totalThrows > 0 ? session.totalTime / totalThrows : 0;
+                
+                // Check if session has hit position data
+                const hasHitData = session.hitPositions && session.hitPositions.length > 0;
+                const madeHits = hasHitData ? session.hitPositions.filter(h => h.type === 'made').length : 0;
+                const missHits = hasHitData ? session.hitPositions.filter(h => h.type === 'miss').length : 0;
+                
+                return `
+                    <div class="card session-card">
+                        <div class="session-header">
+                            <span class="session-date">${date.toLocaleDateString()}</span>
+                            <span class="session-distance">🏈 ${session.distanceFeet} ft</span>
+                            <span class="session-time">${date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</span>
+                        </div>
+                        <div class="session-badges">
+                            <div class="badge badge-blue">
+                                <div class="badge-value">${session.targetThrows}</div>
+                                <div class="badge-label">Target</div>
+                            </div>
+                            <div class="badge badge-green">
+                                <div class="badge-value">${session.madeThrows}</div>
+                                <div class="badge-label">Made</div>
+                            </div>
+                            <div class="badge badge-red">
+                                <div class="badge-value">${session.missedThrows}</div>
+                                <div class="badge-label">Missed</div>
+                            </div>
+                        </div>
+                        <div class="session-details">
+                            <div class="detail-row">
+                                <span>Completion:</span>
+                                <span class="stat-blue">${completionPct.toFixed(1)}%</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>Total Time:</span>
+                                <span class="stat-orange">${formatTime(session.totalTime)}</span>
+                            </div>
+                            <div class="detail-row">
+                                <span>Avg/Throw:</span>
+                                <span class="stat-purple">${formatTime(avgTime)}</span>
+                            </div>
+                        </div>
+                        
+                        ${hasHitData ? `
+                        <div class="session-hit-viz">
+                            <div class="session-hit-viz-header" onclick="toggleSessionViz('${session.id}')">
+                                <h4>📍 Hit Pattern Visualization</h4>
+                                <span class="viz-toggle" id="viz-toggle-${session.id}">Show ▼</span>
+                            </div>
+                            <div class="session-hit-viz-content" id="viz-content-${session.id}">
+                                <div class="session-target-display" id="target-${session.id}">
+                                    <div class="session-target-zone zone-1">
+                                        <div class="session-zone-number">1</div>
+                                    </div>
+                                    <div class="session-target-zone zone-2">
+                                        <div class="session-zone-number">2</div>
+                                    </div>
+                                    <div class="session-target-zone zone-3">
+                                        <div class="session-zone-number">3</div>
+                                    </div>
+                                </div>
+                                <div class="hit-legend">
+                                    <div class="legend-item">
+                                        <div class="legend-dot made"></div>
+                                        <span>Made (${madeHits})</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-dot miss"></div>
+                                        <span>Miss (${missHits})</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <button class="btn-delete" onclick="deleteSession('${session.id}')">Delete</button>
+                    </div>
+                `;
+            }).join('');
+            
+            // Render hit markers for sessions with position data
+            sessions.forEach(session => {
+                if (session.hitPositions && session.hitPositions.length > 0) {
+                    renderSessionHits(session.id, session.hitPositions);
+                }
+            });
+        };
+
+        // Delete session
+        window.deleteSession = (id) => {
+            const sessions = getSessions().filter(s => s.id !== id);
+            saveSessions(sessions);
+            renderHistory();
+            // Refresh other views if they're active
+            const activeTab = document.querySelector('.tab.active').dataset.tab;
+            if (activeTab === 'analytics') renderAnalytics();
+            if (activeTab === 'distance') renderDistanceComparison();
+            if (activeTab === 'records') renderRecords();
+        };
+
+        // Toggle session hit visualization
+        window.toggleSessionViz = (sessionId) => {
+            const content = document.getElementById(`viz-content-${sessionId}`);
+            const toggle = document.getElementById(`viz-toggle-${sessionId}`);
+            
+            if (content.classList.contains('active')) {
+                content.classList.remove('active');
+                toggle.textContent = 'Show ▼';
+            } else {
+                content.classList.add('active');
+                toggle.textContent = 'Hide ▲';
+            }
+        };
+
+        // Render hit markers for a session
+        const renderSessionHits = (sessionId, hitPositions) => {
+            const container = document.getElementById(`target-${sessionId}`);
+            if (!container) return;
+            
+            // Remove any existing markers
+            const existingMarkers = container.querySelectorAll('.session-hit-marker');
+            existingMarkers.forEach(marker => marker.remove());
+            
+            // Add markers for all hits
+            hitPositions.forEach((hit, index) => {
+                const marker = document.createElement('div');
+                marker.className = hit.type === 'miss' ? 'session-hit-marker miss' : 'session-hit-marker';
+                marker.style.left = hit.x + '%';
+                marker.style.top = hit.y + '%';
+                marker.title = `Throw #${index + 1}: ${hit.type}`;
+                container.appendChild(marker);
+            });
+        };
+
+        // Initialize
+        updateUI();
+        updateSyncStatus('offline');
+        
+        // Check for saved user ID
+        const savedUserId = localStorage.getItem('userId');
+        if (savedUserId && firebaseEnabled) {
+            state.userId = savedUserId;
+            syncFromCloud();
+        }
+        
+        // Add sync button to header (optional)
+        document.querySelector('.sync-status').addEventListener('click', () => {
+            document.getElementById('sync-modal').classList.add('active');
+        });
+    </script>
+</body>
+</html>
